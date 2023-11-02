@@ -1,28 +1,86 @@
 ---
-title: ""
-author: ""
+title: "Assignment 03"
+author: "Sean Kim"
 format:
   html:
     embed-resources: true
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+install.packages("tm")
+install.packages("tidytext")
+install.packages("ggplot2")
+
 ```
 
-You can add options to executable code like this
-
 ```{r}
-#| echo: false
-2 * 2
+# Load required libraries
+library(tm)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+
+# Read the data
+url <- "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/03_pubmed/pubmed.csv"
+data <- read.csv(url)
+
+# Create a Corpus
+corpus <- Corpus(VectorSource(data$abstract))
+
+# Preprocess the Corpus
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("en"))
+
+# Create Document-Term Matrix
+dtm <- DocumentTermMatrix(corpus)
+
+# Convert DTM to a matrix
+dtm_matrix <- as.matrix(dtm)
+
+# Get word frequencies
+word_freq <- colSums(dtm_matrix)
+
+# Display the 10 most frequent words
+head(sort(word_freq, decreasing = TRUE), 10)
+
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+2.  Bigrams:
+
+    ```{r}
+    # Tokenize into bigrams
+    bigrams <- data %>%
+      unnest_tokens(bigram, abstract, token = "ngrams", n = 2)
+
+    # Get the 10 most common bigrams
+    top_bigrams <- bigrams %>%
+      count(bigram, sort = TRUE) %>%
+      head(10)
+
+    # Visualize the bigrams
+    ggplot(top_bigrams, aes(x = reorder(bigram, n), y = n)) +
+      geom_bar(stat = "identity") +
+      labs(x = "Bigram", y = "Frequency", title = "Top 10 Bigrams") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+    ```
+
+```{r}
+# Calculate TF-IDF
+dtm_tfidf <- weightTfIdf(dtm)
+
+# Convert to matrix
+tfidf_matrix <- as.matrix(dtm_tfidf)
+
+# Get the top 5 tokens with the highest TF-IDF for each search term
+top_tfidf_tokens <- apply(tfidf_matrix, 2, function(x) names(sort(x, decreasing = TRUE)[1:5]))
+
+# Display the results
+tfidf_data <- data.frame(
+  Search_Term = rep(colnames(tfidf_matrix), each = 5),
+  Top_Tokens = unlist(top_tfidf_tokens)
+)
+print(tfidf_data)
+```
