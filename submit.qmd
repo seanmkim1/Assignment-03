@@ -6,81 +6,55 @@ format:
     embed-resources: true
 ---
 
-```{r}
-install.packages("tm")
-install.packages("tidytext")
-install.packages("ggplot2")
-
+```{}
 ```
 
 ```{r}
-# Load required libraries
-library(tm)
+
 library(tidytext)
 library(dplyr)
 library(ggplot2)
 
-# Read the data
 url <- "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/03_pubmed/pubmed.csv"
 data <- read.csv(url)
 
-# Create a Corpus
-corpus <- Corpus(VectorSource(data$abstract))
+#tokenize and count
+word_freq <- data %>%
+  unnest_tokens(word, abstract) %>%
+  anti_join(stop_words) %>%
+  count(word, sort = TRUE)
 
-# Preprocess the Corpus
-corpus <- tm_map(corpus, content_transformer(tolower))
-corpus <- tm_map(corpus, removePunctuation)
-corpus <- tm_map(corpus, removeNumbers)
-corpus <- tm_map(corpus, removeWords, stopwords("en"))
-
-# Create Document-Term Matrix
-dtm <- DocumentTermMatrix(corpus)
-
-# Convert DTM to a matrix
-dtm_matrix <- as.matrix(dtm)
-
-# Get word frequencies
-word_freq <- colSums(dtm_matrix)
-
-# Display the 10 most frequent words
-head(sort(word_freq, decreasing = TRUE), 10)
-
+#10 most frq words
+head(word_freq, 10)
 ```
 
 2.  Bigrams:
 
     ```{r}
-    # Tokenize into bigrams
-    bigrams <- data %>%
-      unnest_tokens(bigram, abstract, token = "ngrams", n = 2)
-
-    # Get the 10 most common bigrams
-    top_bigrams <- bigrams %>%
+    top_bigrams <- data %>%
+      unnest_tokens(bigram, abstract, token = "ngrams", n = 2) %>%
       count(bigram, sort = TRUE) %>%
       head(10)
 
-    # Visualize the bigrams
+    #Visualize
     ggplot(top_bigrams, aes(x = reorder(bigram, n), y = n)) +
       geom_bar(stat = "identity") +
       labs(x = "Bigram", y = "Frequency", title = "Top 10 Bigrams") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
     ```
 
 ```{r}
-# Calculate TF-IDF
-dtm_tfidf <- weightTfIdf(dtm)
+top_tfidf_tokens <- data %>%
+  unnest_tokens(word, abstract) %>%
+  anti_join(stop_words) %>%
+  count(word, term) %>%
+  bind_tf_idf(word, term, n) %>%
+  group_by(term) %>%
+  slice_max(tf_idf, n = 5) %>%
+  ungroup() %>%
+  arrange(term, desc(tf_idf))
 
-# Convert to matrix
-tfidf_matrix <- as.matrix(dtm_tfidf)
-
-# Get the top 5 tokens with the highest TF-IDF for each search term
-top_tfidf_tokens <- apply(tfidf_matrix, 2, function(x) names(sort(x, decreasing = TRUE)[1:5]))
-
-# Display the results
-tfidf_data <- data.frame(
-  Search_Term = rep(colnames(tfidf_matrix), each = 5),
-  Top_Tokens = unlist(top_tfidf_tokens)
-)
-print(tfidf_data)
+print(top_tfidf_tokens)
 ```
+
+Compared to question 1, these results are quite different, giving much more information. Covid was most often associated with "19" in the first, whereas this query gives us "pandemic, coronavirus, sars" - giving us more information about the nature of covid as a respiratory syndrome and a coronavirus. For another example, we get a clue that preeclampsia is associated with pregnancy using this method of searching. This was not apparent in the results of question 1.
